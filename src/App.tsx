@@ -1,4 +1,14 @@
 import { useState, useEffect } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { storyService } from "./services/storyService";
+import { aiService } from "./services/aiService";
 import { Header } from "./components/Header";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { StoryDisplay } from "./components/StoryDisplay";
@@ -8,6 +18,9 @@ import { EmptyState } from "./components/EmptyState";
 import { NewStoryDialog } from "./components/NewStoryDialog";
 import { WritingAnalytics } from "./components/WritingAnalytics";
 import { CharacterAvatarsPanel } from "./components/CharacterAvatarsPanel";
+import { LoginPage } from "./pages/auth/LoginPage";
+import { RegisterPage } from "./pages/auth/RegisterPage";
+import { OAuthCallback } from "./pages/auth/OAuthCallback";
 import {
   Sheet,
   SheetContent,
@@ -16,6 +29,11 @@ import {
   SheetDescription,
 } from "./components/ui/sheet";
 import { FileText, Users, BarChart3 } from "lucide-react";
+import React from "react";
+import type {
+  Story as ServiceStory,
+  StorySegment as ServiceSegment,
+} from "./services/storyService";
 
 interface StorySegment {
   id: string;
@@ -43,20 +61,89 @@ interface Story {
   characters: Character[];
 }
 
-export default function App() {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+// Helper function to convert service Story to UI Story
+function mapServiceStoryToUI(serviceStory: ServiceStory): Story {
+  return {
+    id: serviceStory.id,
+    title: serviceStory.title,
+    wordCount: serviceStory.wordCount,
+    lastModified: new Date(serviceStory.updatedAt).toLocaleDateString(),
+    segments: serviceStory.segments.map((seg: ServiceSegment) => ({
+      id: seg.id,
+      text: seg.text,
+      author: seg.author,
+      timestamp: new Date(seg.createdAt).toLocaleTimeString(),
+    })),
+    characters: [],
+  };
+}
+
+// Protected Route Component
+function ProtectedRoute({ children }: { children: React.ReactElement }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4" />
+          <p className="text-foreground font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
+
+// Main App Component
+function AppContent() {
+  const { user } = useAuth();
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("dark");
+  const [temperature, setTemperature] = useState(0.7);
   const [stories, setStories] = useState<Story[]>([]);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAvatarGenerating, setIsAvatarGenerating] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNewStoryDialogOpen, setIsNewStoryDialogOpen] = useState(false);
+  const [isLoadingStories, setIsLoadingStories] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<
     "stories" | "analytics" | "characters"
   >("stories");
 
   // Get current story
   const currentStory = stories.find((s) => s.id === selectedStoryId);
+
+  // Load stories from database on mount
+  useEffect(() => {
+    const loadStories = async () => {
+      if (!user?.id) return;
+      try {
+        setIsLoadingStories(true);
+        setError(null);
+        const userStories = await storyService.getUserStories(user.id);
+        const mappedStories = userStories.map(mapServiceStoryToUI);
+        setStories(mappedStories);
+        if (mappedStories.length > 0 && !selectedStoryId) {
+          setSelectedStoryId(mappedStories[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load stories:", err);
+        setError(err instanceof Error ? err.message : "Failed to load stories");
+      } finally {
+        setIsLoadingStories(false);
+      }
+    };
+
+    loadStories();
+  }, [user?.id, selectedStoryId]);
 
   // Apply theme to document
   useEffect(() => {
@@ -69,6 +156,20 @@ export default function App() {
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const handleThemeChange = (newTheme: "light" | "dark" | "system") => {
+    setTheme(newTheme);
+    // Apply theme to document immediately
+    if (newTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
+
+  const handleTemperatureChange = (temp: number) => {
+    setTemperature(temp);
   };
 
   // Calculate story metrics for current story
@@ -116,106 +217,123 @@ export default function App() {
   };
 
   // Create new story
-  const handleCreateStory = (title: string, initialText: string) => {
-    const newStory: Story = {
-      id: Date.now().toString(),
-      title,
-      wordCount: initialText.split(/\s+/).filter((w) => w.length > 0).length,
-      lastModified: "Just now",
-      segments: initialText.trim()
-        ? [
-            {
-              id: Date.now().toString(),
-              text: initialText,
-              author: "user",
-              timestamp: getTimestamp(),
-            },
-          ]
-        : [],
-      characters: [],
-    };
+  const handleCreateStory = async (title: string, initialText: string) => {
+    if (!user?.id) {
+      setError("User not authenticated");
+      return;
+    }
 
-    setStories([newStory, ...stories]);
-    setSelectedStoryId(newStory.id);
-    setIsNewStoryDialogOpen(false);
-  };
+    try {
+      setError(null);
+      const newStory = await storyService.createStory({
+        title,
+        userId: user.id,
+        initialText: initialText.trim() || undefined,
+      });
 
-  // Delete story
-  const handleDeleteStory = (storyId: string) => {
-    setStories(stories.filter((s) => s.id !== storyId));
-    if (selectedStoryId === storyId) {
-      setSelectedStoryId(
-        stories.length > 1
-          ? stories.find((s) => s.id !== storyId)?.id || null
-          : null,
-      );
+      const mappedStory = mapServiceStoryToUI(newStory);
+      setStories([mappedStory, ...stories]);
+      setSelectedStoryId(mappedStory.id);
+      setIsNewStoryDialogOpen(false);
+    } catch (err) {
+      console.error("Failed to create story:", err);
+      setError(err instanceof Error ? err.message : "Failed to create story");
     }
   };
 
-  // Simulate AI story generation
-  const generateAIResponse = async (_userText: string): Promise<string> => {
-    const aiResponses = [
-      "As her eyes adjusted to the darkness, Sarah noticed something extraordinary. The books on the shelves seemed to shimmer with an otherworldly luminescence, their spines pulsing gently like sleeping heartbeats. She approached the nearest shelf cautiously, her fingertips grazing the ancient leather binding of a particularly ornate volume. The moment she touched it, whispers began to emanate from its pages—voices of characters long forgotten, pleading to have their stories told once more.",
+  // Delete story
+  const handleDeleteStory = async (storyId: string) => {
+    try {
+      setError(null);
+      await storyService.deleteStory(storyId);
+      setStories(stories.filter((s) => s.id !== storyId));
+      if (selectedStoryId === storyId) {
+        setSelectedStoryId(
+          stories.length > 1
+            ? stories.find((s) => s.id !== storyId)?.id || null
+            : null,
+        );
+      }
+    } catch (err) {
+      console.error("Failed to delete story:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete story");
+    }
+  };
 
-      "The Keeper emerged from the shadows, moving with an unsettling grace that defied the natural laws of physics. His form seemed to flicker between solid and translucent, as if he existed in multiple dimensions simultaneously. 'You should not have come here,' he spoke, his voice echoing from everywhere and nowhere at once. 'The library chooses its visitors carefully, and those it selects rarely leave unchanged.'",
-
-      "Sarah's hand trembled as she pulled the ornate volume from the shelf. The book fell open of its own accord, revealing pages filled with shimmering text that seemed to rearrange itself as she watched. Words lifted off the parchment, swirling in the air like golden fireflies before coalescing into images—scenes from a story that felt both familiar and impossibly ancient. She saw herself reflected in those floating visions, but not as she was now. Instead, she witnessed versions of herself from countless parallel lives, each one making different choices, walking different paths.",
-
-      "The ground beneath her feet began to shift and ripple like water. Sarah gasped as the library's marble floor transformed into a map of constellations, each star representing a different story, a different world waiting to be explored. The Keeper's eyes gleamed with an emotion that might have been sympathy or perhaps anticipation. 'Every person who enters this library becomes part of its collection,' he explained. 'But you, Sarah, you have the potential to become more than just another tale on our shelves. You could become a storyteller yourself, one who shapes reality with words.'",
-
-      "A sound like distant thunder rolled through the library, causing the shelves to tremble and ancient dust to cascade from the ceiling like snow. Sarah turned to see a massive door materializing where none had existed before—a portal carved from pure obsidian, covered in symbols that hurt to look at directly. The Keeper's expression shifted to one of genuine alarm. 'No,' he whispered. 'The Archive of Unfinished Stories... it shouldn't be opening. Not yet. Not for you.' But the door was already swinging wide, revealing a darkness so complete it seemed to devour the light around it.",
-    ];
-
-    const randomResponse =
-      aiResponses[Math.floor(Math.random() * aiResponses.length)];
-    return randomResponse;
+  // Generate AI story response using InsForge AI
+  const generateAIResponse = async (userText: string): Promise<string> => {
+    try {
+      const storyContext = currentStory?.title || "";
+      const response = await aiService.generateStoryResponse(
+        userText,
+        storyContext,
+        {
+          model: "gpt-4o",
+          temperature,
+          maxTokens: 300,
+        },
+      );
+      return response;
+    } catch (err) {
+      console.error("AI generation failed:", err);
+      // Fallback response
+      return "The story continues... Tell me more about what happens next.";
+    }
   };
 
   const handleContinueStory = async (text: string) => {
-    if (!currentStory) return;
-
-    const userSegment: StorySegment = {
-      id: Date.now().toString(),
-      text,
-      author: "user",
-      timestamp: getTimestamp(),
-    };
-
-    // Update current story with user segment
-    setStories(
-      stories.map((story) =>
-        story.id === selectedStoryId
-          ? {
-              ...story,
-              segments: [...story.segments, userSegment],
-              wordCount:
-                story.wordCount +
-                text.split(/\s+/).filter((w) => w.length > 0).length,
-              lastModified: "Just now",
-            }
-          : story,
-      ),
-    );
+    if (!currentStory || !selectedStoryId) return;
 
     setIsGenerating(true);
+    setError(null);
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      // Save user segment to database
+      const userSegment = await storyService.addSegment(
+        selectedStoryId,
+        text,
+        "user",
+      );
+
+      // Update UI with user segment
+      setStories(
+        stories.map((story) =>
+          story.id === selectedStoryId
+            ? {
+                ...story,
+                segments: [
+                  ...story.segments,
+                  { ...userSegment, timestamp: getTimestamp() },
+                ],
+                wordCount:
+                  story.wordCount +
+                  text.split(/\s+/).filter((w) => w.length > 0).length,
+                lastModified: "Just now",
+              }
+            : story,
+        ),
+      );
+
+      // Generate AI response
       const aiText = await generateAIResponse(text);
 
-      const aiSegment: StorySegment = {
-        id: (Date.now() + 1).toString(),
-        text: aiText,
-        author: "ai",
-        timestamp: getTimestamp(),
-      };
+      // Save AI segment to database
+      const aiSegment = await storyService.addSegment(
+        selectedStoryId,
+        aiText,
+        "ai",
+      );
 
-      // Update current story with AI segment
+      // Update UI with AI segment
       setStories((prevStories) =>
         prevStories.map((story) =>
           story.id === selectedStoryId
             ? {
                 ...story,
-                segments: [...story.segments, aiSegment],
+                segments: [
+                  ...story.segments,
+                  { ...aiSegment, timestamp: getTimestamp() },
+                ],
                 wordCount:
                   story.wordCount +
                   aiText.split(/\s+/).filter((w) => w.length > 0).length,
@@ -224,8 +342,9 @@ export default function App() {
             : story,
         ),
       );
-    } catch (error) {
-      console.error("Failed to generate AI response:", error);
+    } catch (err) {
+      console.error("Failed to continue story:", err);
+      setError(err instanceof Error ? err.message : "Failed to continue story");
     } finally {
       setIsGenerating(false);
     }
@@ -294,6 +413,9 @@ export default function App() {
         onThemeToggle={toggleTheme}
         onMobileMenuToggle={() => setIsMobileMenuOpen(true)}
         currentStoryTitle={currentStory?.title}
+        temperature={temperature}
+        onTemperatureChange={handleTemperatureChange}
+        onThemeChange={handleThemeChange}
       />
 
       <div className="flex-1 flex md:overflow-hidden">
@@ -310,7 +432,21 @@ export default function App() {
 
         {/* Main Story Area - Full width on mobile */}
         <div className="flex-1 flex flex-col md:overflow-hidden min-w-0">
-          {currentStory ? (
+          {error && (
+            <div className="p-4 bg-red-500/10 border-b border-red-500/30">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+          {isLoadingStories ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4" />
+                <p className="text-foreground font-medium">
+                  Loading stories...
+                </p>
+              </div>
+            </div>
+          ) : currentStory ? (
             <>
               <div className="flex-1 md:overflow-hidden">
                 <StoryDisplay
@@ -441,5 +577,34 @@ export default function App() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+// App Wrapper with Routing
+export default function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/auth/callback" element={<OAuthCallback />} />
+
+          {/* Protected Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <AppContent />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catch all - redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </Router>
   );
 }
