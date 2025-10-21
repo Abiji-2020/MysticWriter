@@ -153,7 +153,7 @@ export default function App() {
   };
 
   // Simulate AI story generation
-  const generateAIResponse = async (userText: string): Promise<string> => {
+  const generateAIResponse = async (_userText: string): Promise<string> => {
     const aiResponses = [
       "As her eyes adjusted to the darkness, Sarah noticed something extraordinary. The books on the shelves seemed to shimmer with an otherworldly luminescence, their spines pulsing gently like sleeping heartbeats. She approached the nearest shelf cautiously, her fingertips grazing the ancient leather binding of a particularly ornate volume. The moment she touched it, whispers began to emanate from its pages—voices of characters long forgotten, pleading to have their stories told once more.",
 

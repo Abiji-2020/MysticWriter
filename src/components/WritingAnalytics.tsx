@@ -97,13 +97,9 @@ export function WritingAnalytics({
           </span>
         </div>
         <div className="relative h-2 rounded-full overflow-hidden bg-secondary/30">
-          <div
-            className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-            style={{
-              width: `${contributionPercentage}%`,
-              background: "linear-gradient(90deg, #3B82F6 0%, #A855F7 100%)",
-              boxShadow: "0 0 20px rgba(168, 85, 247, 0.4)",
-            }}
+          <Progress
+            value={contributionPercentage}
+            className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 shadow-lg shadow-purple-500/30"
           />
         </div>
       </div>
