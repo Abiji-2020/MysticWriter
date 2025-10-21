@@ -22,7 +22,10 @@ export function StoryHeader({
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-foreground mb-3">{title}</h2>
-          <div className="flex flex-wrap items-center gap-4 text-muted-foreground" style={{ fontSize: '0.875rem' }}>
+          <div
+            className="flex flex-wrap items-center gap-4 text-muted-foreground"
+            style={{ fontSize: "0.875rem" }}
+          >
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 dark:text-purple-400 text-purple-600" />
               <span>Started {timestamp}</span>

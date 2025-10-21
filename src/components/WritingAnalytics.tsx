@@ -24,7 +24,10 @@ export function WritingAnalytics({
         {/* Total Words Card */}
         <div className="glass-card rounded-2xl p-4 space-y-2 hover:bg-card/30 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>
+            <span
+              className="text-muted-foreground"
+              style={{ fontSize: "0.75rem" }}
+            >
               Total Words
             </span>
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center ring-1 ring-blue-500/30">
@@ -32,10 +35,16 @@ export function WritingAnalytics({
             </div>
           </div>
           <div>
-            <div className="text-foreground" style={{ fontSize: '1.5rem', fontWeight: '600' }}>
+            <div
+              className="text-foreground"
+              style={{ fontSize: "1.5rem", fontWeight: "600" }}
+            >
               {totalWords.toLocaleString()}
             </div>
-            <div className="dark:text-emerald-400 text-emerald-600" style={{ fontSize: '0.75rem' }}>
+            <div
+              className="dark:text-emerald-400 text-emerald-600"
+              style={{ fontSize: "0.75rem" }}
+            >
               +{wordsToday} today
             </div>
           </div>
@@ -44,7 +53,10 @@ export function WritingAnalytics({
         {/* Characters Card */}
         <div className="glass-card rounded-2xl p-4 space-y-2 hover:bg-card/30 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>
+            <span
+              className="text-muted-foreground"
+              style={{ fontSize: "0.75rem" }}
+            >
               Characters
             </span>
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center ring-1 ring-purple-500/30">
@@ -52,10 +64,16 @@ export function WritingAnalytics({
             </div>
           </div>
           <div>
-            <div className="text-foreground" style={{ fontSize: '1.5rem', fontWeight: '600' }}>
+            <div
+              className="text-foreground"
+              style={{ fontSize: "1.5rem", fontWeight: "600" }}
+            >
               {activeCharacters}
             </div>
-            <div className="dark:text-blue-400 text-blue-600" style={{ fontSize: '0.75rem' }}>
+            <div
+              className="dark:text-blue-400 text-blue-600"
+              style={{ fontSize: "0.75rem" }}
+            >
               Active
             </div>
           </div>
@@ -65,10 +83,16 @@ export function WritingAnalytics({
       {/* Contribution Progress */}
       <div className="glass-card rounded-2xl p-4 space-y-3 hover:bg-card/30 transition-all">
         <div className="flex items-center justify-between">
-          <span className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>
+          <span
+            className="text-muted-foreground"
+            style={{ fontSize: "0.75rem" }}
+          >
             Your Contribution
           </span>
-          <span className="text-foreground" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+          <span
+            className="text-foreground"
+            style={{ fontSize: "0.875rem", fontWeight: "600" }}
+          >
             {contributionPercentage}%
           </span>
         </div>
@@ -77,8 +101,8 @@ export function WritingAnalytics({
             className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
             style={{
               width: `${contributionPercentage}%`,
-              background: 'linear-gradient(90deg, #3B82F6 0%, #A855F7 100%)',
-              boxShadow: '0 0 20px rgba(168, 85, 247, 0.4)',
+              background: "linear-gradient(90deg, #3B82F6 0%, #A855F7 100%)",
+              boxShadow: "0 0 20px rgba(168, 85, 247, 0.4)",
             }}
           />
         </div>
@@ -87,7 +111,10 @@ export function WritingAnalytics({
       {/* Writing Streak */}
       <div className="glass-card rounded-2xl p-4 hover:bg-card/30 transition-all">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>
+          <span
+            className="text-muted-foreground"
+            style={{ fontSize: "0.75rem" }}
+          >
             Writing Streak
           </span>
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center ring-1 ring-orange-500/30">
@@ -96,10 +123,20 @@ export function WritingAnalytics({
         </div>
         <div>
           <div className="text-foreground mb-1">
-            <span style={{ fontSize: '1.5rem', fontWeight: '600' }}>{streakDays}</span>
-            <span className="text-muted-foreground ml-1" style={{ fontSize: '0.875rem' }}>days</span>
+            <span style={{ fontSize: "1.5rem", fontWeight: "600" }}>
+              {streakDays}
+            </span>
+            <span
+              className="text-muted-foreground ml-1"
+              style={{ fontSize: "0.875rem" }}
+            >
+              days
+            </span>
           </div>
-          <div className="dark:text-orange-400 text-orange-600" style={{ fontSize: '0.75rem' }}>
+          <div
+            className="dark:text-orange-400 text-orange-600"
+            style={{ fontSize: "0.75rem" }}
+          >
             Keep it up! 🔥
           </div>
         </div>

@@ -6,43 +6,74 @@ interface HeaderProps {
   theme: "light" | "dark";
   onThemeToggle: () => void;
   onMobileMenuToggle?: () => void;
+  currentStoryTitle?: string;
 }
 
-export function Header({ theme, onThemeToggle, onMobileMenuToggle }: HeaderProps) {
+export function Header({
+  theme,
+  onThemeToggle,
+  onMobileMenuToggle,
+  currentStoryTitle,
+}: HeaderProps) {
   return (
     <header className="border-b border-border/30 glass backdrop-blur-xl">
-      <div className="px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
-            <Feather className="w-5 h-5 text-white" />
+      <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
+        {/* Left - Branding and Current Story */}
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
+              <Feather className="w-4 h-4 text-white" />
+            </div>
+            <div className="hidden sm:block">
+              <h1 className="text-foreground" style={{ fontSize: "1.125rem" }}>
+                MysticWriter
+              </h1>
+            </div>
           </div>
-          <div>
-            <h1 className="text-foreground">MysticWriter</h1>
-            <p className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>
-              Collaborative Creative Writing
-            </p>
-          </div>
+          {currentStoryTitle && (
+            <>
+              <div className="hidden md:block w-px h-6 bg-border/50"></div>
+              <div className="hidden md:block min-w-0">
+                <p
+                  className="text-muted-foreground truncate"
+                  style={{ fontSize: "0.875rem" }}
+                >
+                  {currentStoryTitle}
+                </p>
+              </div>
+            </>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Right - Actions */}
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden rounded-full"
+            className="lg:hidden rounded-full h-9 w-9"
             onClick={onMobileMenuToggle}
           >
             <Menu className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="hidden sm:flex rounded-full">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden sm:flex rounded-full h-9 w-9"
+          >
             <Bell className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="hidden sm:flex rounded-full">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden md:flex rounded-full h-9 w-9"
+          >
             <Share2 className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={onThemeToggle}
-            className="rounded-full"
+            className="rounded-full h-9 w-9"
           >
             {theme === "dark" ? (
               <Sun className="w-4 h-4" />
@@ -50,7 +81,11 @@ export function Header({ theme, onThemeToggle, onMobileMenuToggle }: HeaderProps
               <Moon className="w-4 h-4" />
             )}
           </Button>
-          <Button variant="ghost" size="icon" className="hidden sm:flex rounded-full">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden md:flex rounded-full h-9 w-9"
+          >
             <Settings className="w-4 h-4" />
           </Button>
           <Avatar className="w-8 h-8">

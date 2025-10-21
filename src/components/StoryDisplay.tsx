@@ -16,12 +16,12 @@ interface StoryDisplayProps {
 export function StoryDisplay({ segments, isGenerating }: StoryDisplayProps) {
   return (
     <ScrollArea className="h-full">
-      <div className="max-w-4xl mx-auto px-6 py-6">
+      <div className="max-w-5xl mx-auto px-6 py-8">
         {segments.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+          <div className="text-center py-20">
+            <div className="w-20 h-20 mx-auto mb-5 rounded-3xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 dark:from-purple-500/30 dark:to-pink-500/30 flex items-center justify-center border border-purple-500/20 dark:border-purple-500/30 shadow-lg shadow-purple-500/10">
               <svg
-                className="w-8 h-8 text-primary"
+                className="w-10 h-10 text-purple-600 dark:text-purple-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -34,9 +34,15 @@ export function StoryDisplay({ segments, isGenerating }: StoryDisplayProps) {
                 />
               </svg>
             </div>
-            <h3 className="text-foreground mb-2">Begin Your Story</h3>
-            <p className="text-muted-foreground">
-              Write your opening lines below and watch as the AI continues your tale.
+            <h3 className="text-foreground mb-3" style={{ fontSize: "1.5rem" }}>
+              Begin Your Story
+            </h3>
+            <p
+              className="text-muted-foreground max-w-md mx-auto"
+              style={{ fontSize: "1.0625rem", lineHeight: "1.7" }}
+            >
+              Write your opening lines below and watch as the AI weaves the next
+              chapter of your tale with creative magic.
             </p>
           </div>
         ) : (
@@ -51,7 +57,7 @@ export function StoryDisplay({ segments, isGenerating }: StoryDisplayProps) {
         )}
         {isGenerating && (
           <StorySegment
-            text="Weaving the next chapter of your story..."
+            text="Weaving the next chapter of your story with creative magic..."
             author="ai"
             isGenerating={true}
           />

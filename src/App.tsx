@@ -1,13 +1,21 @@
 import { useState, useEffect } from "react";
 import { Header } from "./components/Header";
-import { StoryHeader } from "./components/StoryHeader";
+import { LeftSidebar } from "./components/LeftSidebar";
 import { StoryDisplay } from "./components/StoryDisplay";
 import { BottomToolbar } from "./components/BottomToolbar";
-import { CharacterAvatarsPanel } from "./components/CharacterAvatarPanel";
+import { RightPanel } from "./components/RightPanel";
+import { EmptyState } from "./components/EmptyState";
+import { NewStoryDialog } from "./components/NewStoryDialog";
 import { WritingAnalytics } from "./components/WritingAnalytics";
-import { Sheet, SheetContent, SheetHeader } from "./components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { ScrollArea } from "./components/ui/scroll-area";
+import { CharacterAvatarsPanel } from "./components/CharacterAvatarsPanel";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "./components/ui/sheet";
+import { FileText, Users, BarChart3 } from "lucide-react";
 
 interface StorySegment {
   id: string;
@@ -26,30 +34,29 @@ interface Character {
   statusLabel: string;
 }
 
+interface Story {
+  id: string;
+  title: string;
+  wordCount: number;
+  lastModified: string;
+  segments: StorySegment[];
+  characters: Character[];
+}
+
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [segments, setSegments] = useState<StorySegment[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAvatarGenerating, setIsAvatarGenerating] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [characters, setCharacters] = useState<Character[]>([
-    {
-      id: "1",
-      name: "Sarah",
-      description: "A curious urban explorer",
-      role: "Protagonist • Library Explorer",
-      status: "active",
-      statusLabel: "Active",
-    },
-    {
-      id: "2",
-      name: "The Keeper",
-      description: "A mysterious library guardian",
-      role: "Supporting • Library Guardian",
-      status: "mentioned",
-      statusLabel: "Mentioned",
-    },
-  ]);
+  const [isNewStoryDialogOpen, setIsNewStoryDialogOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<
+    "stories" | "analytics" | "characters"
+  >("stories");
+
+  // Get current story
+  const currentStory = stories.find((s) => s.id === selectedStoryId);
 
   // Apply theme to document
   useEffect(() => {
@@ -64,24 +71,41 @@ export default function App() {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  // Calculate story metrics
-  const totalWords = segments.reduce((acc, segment) => {
-    return acc + segment.text.split(/\s+/).filter((w) => w.length > 0).length;
-  }, 0);
+  // Calculate story metrics for current story
+  const totalWords = currentStory
+    ? currentStory.segments.reduce((acc, segment) => {
+        return (
+          acc + segment.text.split(/\s+/).filter((w) => w.length > 0).length
+        );
+      }, 0)
+    : 0;
 
-  const wordsToday = segments
-    .filter((segment) => segment.author === "user")
-    .reduce((acc, segment) => {
-      return acc + segment.text.split(/\s+/).filter((w) => w.length > 0).length;
-    }, 0);
+  const wordsToday = currentStory
+    ? currentStory.segments
+        .filter((segment) => segment.author === "user")
+        .reduce((acc, segment) => {
+          return (
+            acc + segment.text.split(/\s+/).filter((w) => w.length > 0).length
+          );
+        }, 0)
+    : 0;
 
-  const activeCharacters = characters.filter((c) => c.status === "active").length;
+  const activeCharacters = currentStory
+    ? currentStory.characters.filter((c) => c.status === "active").length
+    : 0;
 
-  const userWords = segments
-    .filter((s) => s.author === "user")
-    .reduce((acc, s) => acc + s.text.split(/\s+/).filter((w) => w.length > 0).length, 0);
+  const userWords = currentStory
+    ? currentStory.segments
+        .filter((s) => s.author === "user")
+        .reduce(
+          (acc, s) =>
+            acc + s.text.split(/\s+/).filter((w) => w.length > 0).length,
+          0,
+        )
+    : 0;
 
-  const contributionPercentage = totalWords > 0 ? Math.round((userWords / totalWords) * 100) : 0;
+  const contributionPercentage =
+    totalWords > 0 ? Math.round((userWords / totalWords) * 100) : 0;
 
   const streakDays = 7; // Mock data
 
@@ -89,6 +113,43 @@ export default function App() {
   const getTimestamp = () => {
     const timeAgo = Math.floor(Math.random() * 5) + 1;
     return `${timeAgo} ${timeAgo === 1 ? "minute" : "minutes"} ago`;
+  };
+
+  // Create new story
+  const handleCreateStory = (title: string, initialText: string) => {
+    const newStory: Story = {
+      id: Date.now().toString(),
+      title,
+      wordCount: initialText.split(/\s+/).filter((w) => w.length > 0).length,
+      lastModified: "Just now",
+      segments: initialText.trim()
+        ? [
+            {
+              id: Date.now().toString(),
+              text: initialText,
+              author: "user",
+              timestamp: getTimestamp(),
+            },
+          ]
+        : [],
+      characters: [],
+    };
+
+    setStories([newStory, ...stories]);
+    setSelectedStoryId(newStory.id);
+    setIsNewStoryDialogOpen(false);
+  };
+
+  // Delete story
+  const handleDeleteStory = (storyId: string) => {
+    setStories(stories.filter((s) => s.id !== storyId));
+    if (selectedStoryId === storyId) {
+      setSelectedStoryId(
+        stories.length > 1
+          ? stories.find((s) => s.id !== storyId)?.id || null
+          : null,
+      );
+    }
   };
 
   // Simulate AI story generation
@@ -105,18 +166,36 @@ export default function App() {
       "A sound like distant thunder rolled through the library, causing the shelves to tremble and ancient dust to cascade from the ceiling like snow. Sarah turned to see a massive door materializing where none had existed before—a portal carved from pure obsidian, covered in symbols that hurt to look at directly. The Keeper's expression shifted to one of genuine alarm. 'No,' he whispered. 'The Archive of Unfinished Stories... it shouldn't be opening. Not yet. Not for you.' But the door was already swinging wide, revealing a darkness so complete it seemed to devour the light around it.",
     ];
 
-    const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+    const randomResponse =
+      aiResponses[Math.floor(Math.random() * aiResponses.length)];
     return randomResponse;
   };
 
   const handleContinueStory = async (text: string) => {
+    if (!currentStory) return;
+
     const userSegment: StorySegment = {
       id: Date.now().toString(),
       text,
       author: "user",
       timestamp: getTimestamp(),
     };
-    setSegments([...segments, userSegment]);
+
+    // Update current story with user segment
+    setStories(
+      stories.map((story) =>
+        story.id === selectedStoryId
+          ? {
+              ...story,
+              segments: [...story.segments, userSegment],
+              wordCount:
+                story.wordCount +
+                text.split(/\s+/).filter((w) => w.length > 0).length,
+              lastModified: "Just now",
+            }
+          : story,
+      ),
+    );
 
     setIsGenerating(true);
     try {
@@ -129,7 +208,22 @@ export default function App() {
         author: "ai",
         timestamp: getTimestamp(),
       };
-      setSegments((prev) => [...prev, aiSegment]);
+
+      // Update current story with AI segment
+      setStories((prevStories) =>
+        prevStories.map((story) =>
+          story.id === selectedStoryId
+            ? {
+                ...story,
+                segments: [...story.segments, aiSegment],
+                wordCount:
+                  story.wordCount +
+                  aiText.split(/\s+/).filter((w) => w.length > 0).length,
+                lastModified: "Just now",
+              }
+            : story,
+        ),
+      );
     } catch (error) {
       console.error("Failed to generate AI response:", error);
     } finally {
@@ -139,8 +233,10 @@ export default function App() {
 
   const handleGenerateAvatar = async (
     characterName: string,
-    description: string
+    description: string,
   ): Promise<string> => {
+    if (!currentStory) return "";
+
     setIsAvatarGenerating(true);
 
     try {
@@ -152,9 +248,10 @@ export default function App() {
         "https://images.unsplash.com/photo-1579572331145-5e53b299c64e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxteXN0ZXJpb3VzJTIwcGVyc29uJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzYxMDIyNTAwfDA&ixlib=rb-4.1.0&q=80&w=1080",
       ];
 
-      const imageUrl = mockImages[Math.floor(Math.random() * mockImages.length)];
+      const imageUrl =
+        mockImages[Math.floor(Math.random() * mockImages.length)];
 
-      // If character name is provided, add to characters list
+      // If character name is provided, add to current story's characters
       if (characterName.trim()) {
         const newCharacter: Character = {
           id: Date.now().toString(),
@@ -165,7 +262,14 @@ export default function App() {
           status: "inactive",
           statusLabel: "Created",
         };
-        setCharacters([...characters, newCharacter]);
+
+        setStories(
+          stories.map((story) =>
+            story.id === selectedStoryId
+              ? { ...story, characters: [...story.characters, newCharacter] }
+              : story,
+          ),
+        );
       }
 
       return imageUrl;
@@ -174,83 +278,166 @@ export default function App() {
     }
   };
 
+  const handleNewStory = () => {
+    setIsNewStoryDialogOpen(true);
+  };
+
+  const handleStorySelect = (storyId: string) => {
+    setSelectedStoryId(storyId);
+    setIsMobileMenuOpen(false);
+  };
+
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="min-h-screen md:h-screen flex flex-col bg-background">
       <Header
         theme={theme}
         onThemeToggle={toggleTheme}
         onMobileMenuToggle={() => setIsMobileMenuOpen(true)}
+        currentStoryTitle={currentStory?.title}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main Story Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <StoryHeader
-            title="The Enchanted Library"
-            isActive={true}
-            timestamp="2 hours ago"
-            wordCount={totalWords}
-            characterCount={characters.length}
+      <div className="flex-1 flex md:overflow-hidden">
+        {/* Left Sidebar - Desktop only (hidden on mobile/tablet) */}
+        <div className="hidden lg:block">
+          <LeftSidebar
+            stories={stories}
+            selectedStoryId={selectedStoryId}
+            onStorySelect={handleStorySelect}
+            onNewStory={handleNewStory}
+            onDeleteStory={handleDeleteStory}
           />
-          <div className="flex-1 overflow-hidden">
-            <StoryDisplay segments={segments} isGenerating={isGenerating} />
-          </div>
-          <BottomToolbar onContinueStory={handleContinueStory} isGenerating={isGenerating} />
         </div>
 
-        {/* Right Sidebar - Desktop */}
-        <div className="hidden lg:flex flex-col w-96 border-l border-border/30">
-          {/* Writing Analytics */}
-          <div className="border-b border-border/30">
-            <WritingAnalytics
-              totalWords={totalWords}
-              wordsToday={wordsToday}
-              activeCharacters={activeCharacters}
-              contributionPercentage={contributionPercentage}
-              streakDays={streakDays}
-            />
-          </div>
+        {/* Main Story Area - Full width on mobile */}
+        <div className="flex-1 flex flex-col md:overflow-hidden min-w-0">
+          {currentStory ? (
+            <>
+              <div className="flex-1 md:overflow-hidden">
+                <StoryDisplay
+                  segments={currentStory.segments}
+                  isGenerating={isGenerating}
+                />
+              </div>
+              <BottomToolbar
+                onContinueStory={handleContinueStory}
+                isGenerating={isGenerating}
+              />
+            </>
+          ) : (
+            <EmptyState onNewStory={handleNewStory} />
+          )}
+        </div>
 
-          {/* Character Avatars Panel */}
-          <div className="flex-1 overflow-hidden">
-            <CharacterAvatarsPanel
-              characters={characters}
-              onGenerateAvatar={handleGenerateAvatar}
-              isGenerating={isAvatarGenerating}
-            />
-          </div>
+        {/* Right Panel - Desktop only (hidden on mobile/tablet) */}
+        <div className="hidden xl:block">
+          <RightPanel
+            characters={currentStory?.characters || []}
+            onGenerateAvatar={handleGenerateAvatar}
+            isGenerating={isAvatarGenerating}
+            totalWords={totalWords}
+            wordsToday={wordsToday}
+            activeCharacters={activeCharacters}
+            contributionPercentage={contributionPercentage}
+            streakDays={streakDays}
+            hasStorySelected={!!currentStory}
+          />
         </div>
       </div>
 
-      {/* Mobile Sheet */}
+      {/* New Story Dialog */}
+      <NewStoryDialog
+        open={isNewStoryDialogOpen}
+        onOpenChange={setIsNewStoryDialogOpen}
+        onCreateStory={handleCreateStory}
+      />
+
+      {/* Mobile/Tablet Sheet - Accessible on lg and smaller screens */}
       <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-        <SheetContent side="right" className="w-full sm:w-96 p-0 glass backdrop-blur-xl">
-          <Tabs defaultValue="analytics" className="h-full flex flex-col">
-            <SheetHeader className="p-4 border-b border-border/30">
-              <TabsList className="grid w-full grid-cols-2 glass-card">
-                <TabsTrigger value="analytics" className="rounded-xl">Analytics</TabsTrigger>
-                <TabsTrigger value="characters" className="rounded-xl">Characters</TabsTrigger>
-              </TabsList>
-            </SheetHeader>
-            <TabsContent value="analytics" className="flex-1 m-0 overflow-hidden">
-              <ScrollArea className="h-full">
-                <WritingAnalytics
-                  totalWords={totalWords}
-                  wordsToday={wordsToday}
-                  activeCharacters={activeCharacters}
-                  contributionPercentage={contributionPercentage}
-                  streakDays={streakDays}
+        <SheetContent
+          side="left"
+          className="w-full sm:w-[400px] p-0 glass backdrop-blur-xl"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription>
+              Access stories, analytics, and character management
+            </SheetDescription>
+          </SheetHeader>
+          <div className="h-full flex flex-col">
+            {/* Mobile Navigation */}
+            <div className="p-4 border-b border-border/30">
+              <div className="glass-card rounded-full p-1 flex items-center gap-1">
+                <button
+                  onClick={() => setMobileView("stories")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-full transition-all ${
+                    mobileView === "stories"
+                      ? "gradient-purple text-white shadow-lg shadow-purple-500/30"
+                      : "text-muted-foreground"
+                  }`}
+                  style={{ fontSize: "0.8125rem" }}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Stories</span>
+                </button>
+                <button
+                  onClick={() => setMobileView("analytics")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-full transition-all ${
+                    mobileView === "analytics"
+                      ? "gradient-purple text-white shadow-lg shadow-purple-500/30"
+                      : "text-muted-foreground"
+                  }`}
+                  style={{ fontSize: "0.8125rem" }}
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>Analytics</span>
+                </button>
+                <button
+                  onClick={() => setMobileView("characters")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-full transition-all ${
+                    mobileView === "characters"
+                      ? "gradient-purple text-white shadow-lg shadow-purple-500/30"
+                      : "text-muted-foreground"
+                  }`}
+                  style={{ fontSize: "0.8125rem" }}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Characters</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Content */}
+            <div className="flex-1 overflow-hidden">
+              {mobileView === "stories" && (
+                <LeftSidebar
+                  stories={stories}
+                  selectedStoryId={selectedStoryId}
+                  onStorySelect={handleStorySelect}
+                  onNewStory={handleNewStory}
+                  onDeleteStory={handleDeleteStory}
                 />
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="characters" className="flex-1 m-0 overflow-hidden">
-              <CharacterAvatarsPanel
-                characters={characters}
-                onGenerateAvatar={handleGenerateAvatar}
-                isGenerating={isAvatarGenerating}
-              />
-            </TabsContent>
-          </Tabs>
+              )}
+              {mobileView === "analytics" && (
+                <div className="h-full overflow-y-auto custom-scrollbar">
+                  <WritingAnalytics
+                    totalWords={totalWords}
+                    wordsToday={wordsToday}
+                    activeCharacters={activeCharacters}
+                    contributionPercentage={contributionPercentage}
+                    streakDays={streakDays}
+                  />
+                </div>
+              )}
+              {mobileView === "characters" && (
+                <CharacterAvatarsPanel
+                  characters={currentStory?.characters || []}
+                  onGenerateAvatar={handleGenerateAvatar}
+                  isGenerating={isAvatarGenerating}
+                  hasStorySelected={!!currentStory}
+                />
+              )}
+            </div>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
