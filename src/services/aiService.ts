@@ -158,11 +158,28 @@ ${contextInfo}High quality, detailed, professional illustration style. Character
           }
           const blob = new Blob([bytes], { type: "image/png" });
 
+          const resizedBlob = await new Promise(async (resolve) => {
+            const img = await createImageBitmap(blob);
+            const canvas = document.createElement("canvas");
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext("2d");
+
+            // Draw the image resized
+            ctx?.drawImage(img, 0, 0, 512, 512);
+
+            // Export as compressed WebP (much smaller than PNG)
+            canvas.toBlob(
+              (blob) => resolve(blob),
+              "image/webp",
+              0.7, // quality (0–1)
+            );
+          });
           const fileName = `avatar-${characterName.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.png`;
 
           const { data: uploadData, error: uploadError } = await client.storage
             .from("character-avatars")
-            .upload(fileName, blob);
+            .upload(fileName, resizedBlob as Blob);
 
           if (uploadError) {
             console.error("Avatar upload error:", uploadError);
