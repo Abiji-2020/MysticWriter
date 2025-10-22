@@ -124,7 +124,7 @@ Keep responses focused and engaging, typically 2-4 sentences.`;
       const contextInfo = storyContext
         ? `Story context: ${storyContext}. `
         : "";
-      const prompt = `Create a fantasy character portrait for ${characterName}. ${description}. 
+      const prompt = `Create a fantasy character portrait in the size of 96x96 for ${characterName}. ${description}. 
 ${contextInfo}High quality, detailed, professional illustration style. Character-focused composition.`;
 
       // Image generation returns OpenAI format directly (not wrapped in { data, error })
