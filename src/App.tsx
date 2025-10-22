@@ -9,6 +9,9 @@ import {
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { storyService } from "./services/storyService";
 import { aiService } from "./services/aiService";
+import { characterService } from "./services/characterService";
+import { storyHistoryService } from "./services/storyHistoryService";
+import { analyticsService } from "./services/analyticsService";
 import { Header } from "./components/Header";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { StoryDisplay } from "./components/StoryDisplay";
@@ -44,12 +47,13 @@ interface StorySegment {
 
 interface Character {
   id: string;
+  storyId: string;
   name: string;
   description: string;
   role: string;
   avatar?: string;
-  status: "active" | "mentioned" | "inactive";
-  statusLabel: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface Story {
@@ -112,14 +116,23 @@ function AppContent() {
   const [isAvatarGenerating, setIsAvatarGenerating] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNewStoryDialogOpen, setIsNewStoryDialogOpen] = useState(false);
-  const [isLoadingStories, setIsLoadingStories] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoadingStories, setIsLoadingStories] = useState(false);
   const [mobileView, setMobileView] = useState<
     "stories" | "analytics" | "characters"
   >("stories");
+  const [analytics, setAnalytics] = useState({
+    totalWords: 0,
+    wordsToday: 0,
+    activeCharacters: 0,
+    streakDays: 0,
+  });
+  const [error, setError] = useState<string | null>(null);
 
   // Get current story
   const currentStory = stories.find((s) => s.id === selectedStoryId);
+
+  // Use analytics from state
+  const { wordsToday, activeCharacters, streakDays } = analytics;
 
   // Load stories from database on mount
   useEffect(() => {
@@ -144,6 +157,40 @@ function AppContent() {
 
     loadStories();
   }, [user?.id, selectedStoryId]);
+
+  // Load story segments and characters when story is selected
+  useEffect(() => {
+    const loadStoryData = async () => {
+      if (!selectedStoryId) return;
+      try {
+        setError(null);
+
+        // Load full story with segments
+        const fullStory = await storyService.getStory(selectedStoryId);
+        const mappedStory = mapServiceStoryToUI(fullStory);
+
+        // Load characters
+        const characters =
+          await characterService.getStoryCharacters(selectedStoryId);
+
+        // Update story with segments and characters using functional update
+        setStories((prevStories) =>
+          prevStories.map((story) =>
+            story.id === selectedStoryId
+              ? { ...mappedStory, characters }
+              : story,
+          ),
+        );
+      } catch (err) {
+        console.error("Failed to load story data:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to load story data",
+        );
+      }
+    };
+
+    loadStoryData();
+  }, [selectedStoryId]);
 
   // Apply theme to document
   useEffect(() => {
@@ -172,27 +219,28 @@ function AppContent() {
     setTemperature(temp);
   };
 
-  // Calculate story metrics for current story
+  // Load analytics from database
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      if (!user?.id) return;
+      try {
+        const summary = await analyticsService.getAnalyticsSummary(user.id);
+        setAnalytics(summary);
+      } catch (err) {
+        console.error("Failed to load analytics:", err);
+      }
+    };
+
+    loadAnalytics();
+  }, [user?.id, stories]); // Reload when stories change
+
+  // Calculate contribution percentage for current story
   const totalWords = currentStory
     ? currentStory.segments.reduce((acc, segment) => {
         return (
           acc + segment.text.split(/\s+/).filter((w) => w.length > 0).length
         );
       }, 0)
-    : 0;
-
-  const wordsToday = currentStory
-    ? currentStory.segments
-        .filter((segment) => segment.author === "user")
-        .reduce((acc, segment) => {
-          return (
-            acc + segment.text.split(/\s+/).filter((w) => w.length > 0).length
-          );
-        }, 0)
-    : 0;
-
-  const activeCharacters = currentStory
-    ? currentStory.characters.filter((c) => c.status === "active").length
     : 0;
 
   const userWords = currentStory
@@ -207,8 +255,6 @@ function AppContent() {
 
   const contributionPercentage =
     totalWords > 0 ? Math.round((userWords / totalWords) * 100) : 0;
-
-  const streakDays = 7; // Mock data
 
   // Format timestamp
   const getTimestamp = () => {
@@ -230,6 +276,17 @@ function AppContent() {
         userId: user.id,
         initialText: initialText.trim() || undefined,
       });
+
+      // Log story creation to history
+      await storyHistoryService.logAction(
+        newStory.id,
+        user.id,
+        "created",
+        `Story created: ${title}`,
+      );
+
+      // Track story creation in analytics
+      await analyticsService.trackStoryCreated(user.id);
 
       const mappedStory = mapServiceStoryToUI(newStory);
       setStories([mappedStory, ...stories]);
@@ -263,7 +320,24 @@ function AppContent() {
   // Generate AI story response using InsForge AI
   const generateAIResponse = async (userText: string): Promise<string> => {
     try {
-      const storyContext = currentStory?.title || "";
+      // Build full conversation history for context
+      const conversationHistory = currentStory?.segments
+        .map((seg) => `${seg.author === "user" ? "User" : "AI"}: ${seg.text}`)
+        .join("\n\n");
+
+      // Build characters context
+      const charactersContext =
+        currentStory?.characters && currentStory.characters.length > 0
+          ? `\n\nCharacters in this story:\n${currentStory.characters
+              .map(
+                (char) => `- ${char.name} (${char.role}): ${char.description}`,
+              )
+              .join("\n")}`
+          : "";
+
+      // Include story title, characters, and full history as context
+      const storyContext = `Story: "${currentStory?.title || "Untitled"}"${charactersContext}\n\nPrevious conversation:\n${conversationHistory || "This is the beginning of the story."}`;
+
       const response = await aiService.generateStoryResponse(
         userText,
         storyContext,
@@ -294,6 +368,12 @@ function AppContent() {
         text,
         "user",
       );
+
+      // Track words written in analytics
+      if (user?.id) {
+        const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
+        await analyticsService.trackWordsWritten(user.id, wordCount);
+      }
 
       // Update UI with user segment
       setStories(
@@ -354,46 +434,107 @@ function AppContent() {
     characterName: string,
     description: string,
   ): Promise<string> => {
-    if (!currentStory) return "";
+    if (!currentStory || !selectedStoryId) return "";
 
     setIsAvatarGenerating(true);
+    setError(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Create character with AI-generated avatar
+      const newCharacter = await characterService.createCharacter({
+        storyId: selectedStoryId,
+        name: characterName,
+        role: "Character",
+        generateAvatar: true,
+      });
 
-      const mockImages = [
-        "https://images.unsplash.com/photo-1758850253805-8572b62e376d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmYW50YXN5JTIwY2hhcmFjdGVyJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzYwOTQ2MzgyfDA&ixlib=rb-4.1.0&q=80&w=1080",
-        "https://images.unsplash.com/photo-1615672968364-d59e8d4be430?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtZWRpZXZhbCUyMHdhcnJpb3IlMjBwb3J0cmFpdHxlbnwxfHx8fDE3NjEwMjI0OTl8MA&ixlib=rb-4.1.0&q=80&w=1080",
-        "https://images.unsplash.com/photo-1579572331145-5e53b299c64e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxteXN0ZXJpb3VzJTIwcGVyc29uJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzYxMDIyNTAwfDA&ixlib=rb-4.1.0&q=80&w=1080",
-      ];
-
-      const imageUrl =
-        mockImages[Math.floor(Math.random() * mockImages.length)];
-
-      // If character name is provided, add to current story's characters
-      if (characterName.trim()) {
-        const newCharacter: Character = {
-          id: Date.now().toString(),
-          name: characterName,
-          description,
-          role: "Custom Character",
-          avatar: imageUrl,
-          status: "inactive",
-          statusLabel: "Created",
-        };
-
-        setStories(
-          stories.map((story) =>
-            story.id === selectedStoryId
-              ? { ...story, characters: [...story.characters, newCharacter] }
-              : story,
-          ),
-        );
+      // Track character creation in analytics
+      if (user?.id) {
+        await analyticsService.trackCharacterCreated(user.id);
       }
 
-      return imageUrl;
+      // Update UI with new character
+      setStories(
+        stories.map((story) =>
+          story.id === selectedStoryId
+            ? { ...story, characters: [...story.characters, newCharacter] }
+            : story,
+        ),
+      );
+
+      return newCharacter.avatar || "";
+    } catch (err) {
+      console.error("Failed to generate avatar:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to generate avatar",
+      );
+      return "";
     } finally {
       setIsAvatarGenerating(false);
+    }
+  };
+
+  const handleDeleteCharacter = async (characterId: string): Promise<void> => {
+    if (!currentStory || !selectedStoryId) return;
+
+    setError(null);
+
+    try {
+      // Delete character from database
+      await characterService.deleteCharacter(characterId);
+
+      // Update UI by removing the character
+      setStories(
+        stories.map((story) =>
+          story.id === selectedStoryId
+            ? {
+                ...story,
+                characters: story.characters.filter(
+                  (c) => c.id !== characterId,
+                ),
+              }
+            : story,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to delete character:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to delete character",
+      );
+      throw err; // Re-throw so the component can handle it
+    }
+  };
+
+  const handleGenerateRandomCharacter = async (): Promise<{
+    name: string;
+    description: string;
+  }> => {
+    if (!currentStory) {
+      return {
+        name: "Wandering Traveler",
+        description: "A mysterious figure with an unknown past.",
+      };
+    }
+
+    try {
+      // Build story context from segments
+      const storyContext = currentStory.segments
+        .slice(-3) // Last 3 segments for context
+        .map((seg) => seg.text)
+        .join(" ");
+
+      const randomCharacter = await aiService.generateRandomCharacter(
+        currentStory.title,
+        storyContext,
+      );
+
+      return randomCharacter;
+    } catch (err) {
+      console.error("Failed to generate random character:", err);
+      return {
+        name: "Wandering Traveler",
+        description: "A mysterious figure with an unknown past.",
+      };
     }
   };
 
@@ -469,8 +610,10 @@ function AppContent() {
           <RightPanel
             characters={currentStory?.characters || []}
             onGenerateAvatar={handleGenerateAvatar}
+            onDeleteCharacter={handleDeleteCharacter}
+            onGenerateRandomCharacter={handleGenerateRandomCharacter}
             isGenerating={isAvatarGenerating}
-            totalWords={totalWords}
+            totalWords={analytics.totalWords}
             wordsToday={wordsToday}
             activeCharacters={activeCharacters}
             contributionPercentage={contributionPercentage}
@@ -556,7 +699,7 @@ function AppContent() {
               {mobileView === "analytics" && (
                 <div className="h-full overflow-y-auto custom-scrollbar">
                   <WritingAnalytics
-                    totalWords={totalWords}
+                    totalWords={analytics.totalWords}
                     wordsToday={wordsToday}
                     activeCharacters={activeCharacters}
                     contributionPercentage={contributionPercentage}
@@ -568,6 +711,8 @@ function AppContent() {
                 <CharacterAvatarsPanel
                   characters={currentStory?.characters || []}
                   onGenerateAvatar={handleGenerateAvatar}
+                  onDeleteCharacter={handleDeleteCharacter}
+                  onGenerateRandomCharacter={handleGenerateRandomCharacter}
                   isGenerating={isAvatarGenerating}
                   hasStorySelected={!!currentStory}
                 />

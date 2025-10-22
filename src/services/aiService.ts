@@ -111,12 +111,13 @@ Keep responses focused and engaging, typically 2-4 sentences.`;
 
   /**
    * Generate character avatar using AI image generation and store in bucket
+   * Returns object with url and key for storage
    */
   async generateCharacterAvatar(
     characterName: string,
     description: string,
     storyContext?: string,
-  ): Promise<string> {
+  ): Promise<{ url: string; key: string }> {
     try {
       const client = getInsforgeClient();
 
@@ -126,35 +127,36 @@ Keep responses focused and engaging, typically 2-4 sentences.`;
       const prompt = `Create a fantasy character portrait for ${characterName}. ${description}. 
 ${contextInfo}High quality, detailed, professional illustration style. Character-focused composition.`;
 
-      const { data, error } = await client.ai.images.generate({
+      // Image generation returns OpenAI format directly (not wrapped in { data, error })
+      const response = await client.ai.images.generate({
         model: "google/gemini-2.5-flash-image-preview",
         prompt,
       });
 
-      if (error) {
-        console.error("Avatar API Error:", error);
-        throw new Error(
-          `Avatar API Error: ${error.message || "Unknown error"}`,
-        );
-      }
+      console.log("Avatar API Response:", response);
 
-      if (!data?.data?.[0]) {
-        console.error("Invalid avatar response format:", data);
+      if (!response?.data?.[0]) {
+        console.error("Invalid avatar response format:", response);
         throw new Error("Invalid response format from image generation API");
       }
 
       // Get image data (base64 or URL)
-      const imageData = data.data[0].b64_json || data.data[0].url;
+      const imageData = response.data[0].b64_json || response.data[0].url;
       if (!imageData) {
         throw new Error("No image URL or base64 data in response");
       }
 
       // If it's base64, convert to blob and upload to storage
-      if (data.data[0].b64_json) {
+      if (response.data[0].b64_json) {
         try {
-          const base64Data = data.data[0].b64_json;
-          const buffer = Buffer.from(base64Data, "base64");
-          const blob = new Blob([buffer], { type: "image/png" });
+          const base64Data = response.data[0].b64_json;
+          // Convert base64 to blob (browser-compatible)
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: "image/png" });
 
           const fileName = `avatar-${characterName.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.png`;
 
@@ -162,26 +164,36 @@ ${contextInfo}High quality, detailed, professional illustration style. Character
             .from("character-avatars")
             .upload(fileName, blob);
 
-          if (uploadError || !uploadData?.url) {
-            console.warn(
-              "Avatar upload failed, using base64 fallback:",
-              uploadError,
-            );
-            return `data:image/png;base64,${base64Data}`;
+          if (uploadError) {
+            console.error("Avatar upload error:", uploadError);
+            console.warn("Using base64 fallback for avatar");
+            return { url: `data:image/png;base64,${base64Data}`, key: "" };
           }
 
-          return uploadData.url;
+          // uploadData contains { url, key }
+          if (uploadData?.url) {
+            console.log("Avatar uploaded successfully:", uploadData.url);
+            return {
+              url: uploadData.url,
+              key: uploadData.key || fileName,
+            };
+          }
+
+          // Fallback if url is not in response
+          console.warn("No URL in upload response, using base64 fallback");
+          return { url: `data:image/png;base64,${base64Data}`, key: "" };
         } catch (uploadErr) {
-          console.warn(
-            "Avatar storage error, using base64 fallback:",
-            uploadErr,
-          );
-          return `data:image/png;base64,${data.data[0].b64_json}`;
+          console.error("Avatar storage error:", uploadErr);
+          console.warn("Using base64 fallback for avatar");
+          return {
+            url: `data:image/png;base64,${response.data[0].b64_json}`,
+            key: "",
+          };
         }
       }
 
       // If it's already a URL, return it directly
-      return imageData;
+      return { url: imageData, key: "" };
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -189,8 +201,68 @@ ${contextInfo}High quality, detailed, professional illustration style. Character
           : "Failed to generate character avatar";
       console.error("Avatar generation error:", errorMessage);
 
-      // Return empty string as fallback (character will be created without avatar)
-      return "";
+      // Return empty object as fallback (character will be created without avatar)
+      return { url: "", key: "" };
+    }
+  },
+
+  /**
+   * Generate random character based on story context
+   */
+  async generateRandomCharacter(
+    storyTitle: string,
+    storyContext?: string,
+  ): Promise<{ name: string; description: string }> {
+    try {
+      const client = getInsforgeClient();
+
+      const contextInfo = storyContext
+        ? `Story context: ${storyContext.substring(0, 300)}`
+        : "";
+
+      const response = await client.ai.chat.completions.create({
+        model: "google/gemini-2.5-pro",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a creative character generator for stories. Generate unique, interesting characters that fit the story's theme and genre.",
+          },
+          {
+            role: "user",
+            content: `Generate a random character for a story titled "${storyTitle}". ${contextInfo}
+
+Return ONLY a JSON object with this exact format (no markdown, no extra text):
+{"name": "Character Name", "description": "A vivid 2-3 sentence description of their appearance, personality, and role"}`,
+          },
+        ],
+        temperature: 0.9,
+        maxTokens: 200,
+      });
+
+      if (!response?.choices?.[0]?.message?.content) {
+        throw new Error("Failed to generate character");
+      }
+
+      const content = response.choices[0].message.content.trim();
+      // Remove markdown code blocks if present
+      const jsonContent = content.replace(/```json\n?|\n?```/g, "").trim();
+      const characterData = JSON.parse(jsonContent);
+
+      return {
+        name: characterData.name || "Mysterious Stranger",
+        description:
+          characterData.description ||
+          "A mysterious figure whose past remains unknown.",
+      };
+    } catch (error) {
+      console.error("Random character generation error:", error);
+      // Return fallback character
+      return {
+        name: "Wandering Traveler",
+        description:
+          "A mysterious figure cloaked in shadows, with stories untold and secrets hidden in their eyes.",
+      };
     }
   },
 

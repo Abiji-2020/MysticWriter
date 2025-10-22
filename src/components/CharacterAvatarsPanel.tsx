@@ -1,26 +1,31 @@
 import { useState } from "react";
-import { Sparkles, MoreVertical, Shuffle } from "lucide-react";
+import { Sparkles, Shuffle, Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import { Badge } from "./ui/badge";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface Character {
   id: string;
+  storyId: string;
   name: string;
   description: string;
   role: string;
   avatar?: string;
-  status: "active" | "mentioned" | "inactive";
-  statusLabel: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CharacterAvatarsPanelProps {
   characters: Character[];
   onGenerateAvatar: (name: string, description: string) => Promise<string>;
+  onDeleteCharacter: (characterId: string) => Promise<void>;
+  onGenerateRandomCharacter: () => Promise<{
+    name: string;
+    description: string;
+  }>;
   isGenerating: boolean;
   hasStorySelected?: boolean;
 }
@@ -28,11 +33,17 @@ interface CharacterAvatarsPanelProps {
 export function CharacterAvatarsPanel({
   characters,
   onGenerateAvatar,
+  onDeleteCharacter,
+  onGenerateRandomCharacter,
   isGenerating,
   hasStorySelected = true,
 }: CharacterAvatarsPanelProps) {
   const [characterName, setCharacterName] = useState("");
   const [description, setDescription] = useState("");
+  const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(
+    null,
+  );
+  const [isGeneratingRandom, setIsGeneratingRandom] = useState(false);
 
   const handleGenerate = async () => {
     if (!description.trim()) return;
@@ -41,48 +52,27 @@ export function CharacterAvatarsPanel({
     setDescription("");
   };
 
-  const handleRandom = () => {
-    const randomNames = [
-      "Elara Moonwhisper",
-      "Marcus the Librarian",
-      "Zephyr Stormcaller",
-      "Luna Shadowdancer",
-      "Orion Brightforge",
-    ];
-    const randomDescriptions = [
-      "A mysterious figure cloaked in shadows, with piercing silver eyes",
-      "An elderly wizard with a long white beard and twinkling eyes",
-      "A young warrior with battle scars and determination in their gaze",
-      "An ethereal being with flowing robes and an otherworldly presence",
-    ];
-
-    setCharacterName(
-      randomNames[Math.floor(Math.random() * randomNames.length)],
-    );
-    setDescription(
-      randomDescriptions[Math.floor(Math.random() * randomDescriptions.length)],
-    );
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-emerald-500";
-      case "mentioned":
-        return "bg-orange-500";
-      default:
-        return "bg-gray-500";
+  const handleDelete = async (characterId: string) => {
+    setDeletingCharacterId(characterId);
+    try {
+      await onDeleteCharacter(characterId);
+    } catch (error) {
+      console.error("Failed to delete character:", error);
+    } finally {
+      setDeletingCharacterId(null);
     }
   };
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-      case "mentioned":
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-      default:
-        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+  const handleRandom = async () => {
+    setIsGeneratingRandom(true);
+    try {
+      const randomCharacter = await onGenerateRandomCharacter();
+      setCharacterName(randomCharacter.name);
+      setDescription(randomCharacter.description);
+    } catch (error) {
+      console.error("Failed to generate random character:", error);
+    } finally {
+      setIsGeneratingRandom(false);
     }
   };
 
@@ -122,35 +112,19 @@ export function CharacterAvatarsPanel({
                     className="glass-card rounded-xl p-3 hover:bg-card/30 transition-all cursor-pointer"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="relative">
-                        <Avatar className="w-12 h-12">
-                          {character.avatar ? (
-                            <ImageWithFallback
-                              src={character.avatar}
-                              alt={character.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">
-                              {character.name.charAt(0)}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        <div
-                          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-sidebar ${getStatusColor(
-                            character.status,
-                          )} shadow-lg`}
-                          style={{
-                            boxShadow: `0 0 10px ${
-                              character.status === "active"
-                                ? "rgba(16, 185, 129, 0.5)"
-                                : character.status === "mentioned"
-                                  ? "rgba(249, 115, 22, 0.5)"
-                                  : "rgba(107, 114, 128, 0.5)"
-                            }`,
-                          }}
-                        />
-                      </div>
+                      <Avatar className="w-12 h-12">
+                        {character.avatar ? (
+                          <ImageWithFallback
+                            src={character.avatar}
+                            alt={character.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                            {character.name.charAt(0)}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between mb-1">
                           <div>
@@ -170,18 +144,13 @@ export function CharacterAvatarsPanel({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 -mt-1 -mr-1 rounded-full"
+                            className="h-6 w-6 -mt-1 -mr-1 rounded-full hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            onClick={() => handleDelete(character.id)}
+                            disabled={deletingCharacterId === character.id}
                           >
-                            <MoreVertical className="w-3 h-3" />
+                            <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
-                        <Badge
-                          variant="secondary"
-                          className={`${getStatusBadgeStyle(character.status)}`}
-                          style={{ fontSize: "0.625rem" }}
-                        >
-                          {character.statusLabel}
-                        </Badge>
                       </div>
                     </div>
                   </div>
@@ -202,11 +171,14 @@ export function CharacterAvatarsPanel({
                   variant="ghost"
                   size="sm"
                   onClick={handleRandom}
+                  disabled={isGeneratingRandom || isGenerating}
                   className="dark:text-purple-400 text-purple-600 dark:hover:text-purple-300 hover:text-purple-700 h-auto py-1 px-2 rounded-full"
                   style={{ fontSize: "0.75rem" }}
                 >
-                  <Shuffle className="w-3 h-3 mr-1" />
-                  Random
+                  <Shuffle
+                    className={`w-3 h-3 mr-1 ${isGeneratingRandom ? "animate-spin" : ""}`}
+                  />
+                  {isGeneratingRandom ? "Generating..." : "Random"}
                 </Button>
               </div>
               <div className="glass-card rounded-xl p-4 space-y-4">

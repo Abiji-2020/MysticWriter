@@ -5,17 +5,23 @@ import { WritingAnalytics } from "./WritingAnalytics";
 
 interface Character {
   id: string;
+  storyId: string;
   name: string;
   description: string;
   role: string;
   avatar?: string;
-  status: "active" | "mentioned" | "inactive";
-  statusLabel: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface RightPanelProps {
   characters: Character[];
   onGenerateAvatar: (name: string, description: string) => Promise<string>;
+  onDeleteCharacter: (characterId: string) => Promise<void>;
+  onGenerateRandomCharacter: () => Promise<{
+    name: string;
+    description: string;
+  }>;
   isGenerating: boolean;
   totalWords: number;
   wordsToday: number;
@@ -28,6 +34,8 @@ interface RightPanelProps {
 export function RightPanel({
   characters,
   onGenerateAvatar,
+  onDeleteCharacter,
+  onGenerateRandomCharacter,
   isGenerating,
   totalWords,
   wordsToday,
@@ -86,6 +94,8 @@ export function RightPanel({
           <CharacterAvatarsPanel
             characters={characters}
             onGenerateAvatar={onGenerateAvatar}
+            onDeleteCharacter={onDeleteCharacter}
+            onGenerateRandomCharacter={onGenerateRandomCharacter}
             isGenerating={isGenerating}
             hasStorySelected={hasStorySelected}
           />

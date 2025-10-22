@@ -8,7 +8,6 @@ export interface Character {
   description: string;
   role: string;
   avatar?: string;
-  traits: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -17,7 +16,6 @@ export interface CreateCharacterInput {
   storyId: string;
   name: string;
   role: string;
-  traits?: string[];
   generateAvatar?: boolean;
 }
 
@@ -30,11 +28,9 @@ export const characterService = {
       const client = getInsforgeClient();
 
       // Generate character description using AI
-      const traitsString =
-        (input.traits || []).join(", ") || "mysterious, enigmatic";
       const description = await aiService.generateCharacterDescription(
         input.name,
-        traitsString,
+        input.role,
       );
 
       // Create character record
@@ -47,7 +43,6 @@ export const characterService = {
               name: input.name,
               description,
               role: input.role,
-              traits: input.traits || [],
             },
           ])
           .select()
@@ -58,8 +53,6 @@ export const characterService = {
           characterError?.message || "Failed to create character",
         );
       }
-
-      let avatar: string | undefined;
 
       // Generate avatar if requested
       if (input.generateAvatar) {
@@ -72,17 +65,25 @@ export const characterService = {
             .single();
 
           const storyContext = storyData?.title || "";
-          avatar = await aiService.generateCharacterAvatar(
+          const avatarData = await aiService.generateCharacterAvatar(
             input.name,
             description,
             storyContext,
           );
 
-          // Update character with avatar
-          await client.database
-            .from("characters")
-            .update({ avatar_url: avatar })
-            .eq("id", characterData.id);
+          // Update character with avatar URL and key
+          if (avatarData.url) {
+            await client.database
+              .from("characters")
+              .update({
+                avatar_url: avatarData.url,
+                avatar_key: avatarData.key,
+              })
+              .eq("id", characterData.id);
+            // Update the local characterData to reflect the avatar
+            characterData.avatar_url = avatarData.url;
+            characterData.avatar_key = avatarData.key;
+          }
         } catch (avatarError) {
           console.warn(
             "Avatar generation failed, continuing without avatar:",
@@ -97,8 +98,7 @@ export const characterService = {
         name: characterData.name,
         description: characterData.description,
         role: characterData.role,
-        avatar,
-        traits: characterData.traits || [],
+        avatar: characterData.avatar_url,
         createdAt: characterData.created_at,
         updatedAt: characterData.updated_at,
       };
@@ -134,7 +134,6 @@ export const characterService = {
         description: character.description,
         role: character.role,
         avatar: character.avatar_url,
-        traits: character.traits || [],
         createdAt: character.created_at,
         updatedAt: character.updated_at,
       }));
@@ -170,7 +169,6 @@ export const characterService = {
         description: data.description,
         role: data.role,
         avatar: data.avatar_url,
-        traits: data.traits || [],
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -196,7 +194,6 @@ export const characterService = {
       if (updates.name) updateData.name = updates.name;
       if (updates.description) updateData.description = updates.description;
       if (updates.role) updateData.role = updates.role;
-      if (updates.traits) updateData.traits = updates.traits;
       if (updates.avatar) updateData.avatar_url = updates.avatar;
 
       const { data, error } = await client.database
@@ -217,7 +214,6 @@ export const characterService = {
         description: data.description,
         role: data.role,
         avatar: data.avatar_url,
-        traits: data.traits || [],
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -264,19 +260,22 @@ export const characterService = {
     try {
       const client = getInsforgeClient();
 
-      const avatar = await aiService.generateCharacterAvatar(
+      const avatarData = await aiService.generateCharacterAvatar(
         characterName,
         description,
         storyContext,
       );
 
-      // Update character with avatar
+      // Update character with avatar URL and key
       await client.database
         .from("characters")
-        .update({ avatar_url: avatar })
+        .update({
+          avatar_url: avatarData.url,
+          avatar_key: avatarData.key,
+        })
         .eq("id", characterId);
 
-      return avatar;
+      return avatarData.url;
     } catch (error) {
       console.error("Generate avatar error:", error);
       throw error instanceof Error
